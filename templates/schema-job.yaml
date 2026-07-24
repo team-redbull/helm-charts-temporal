@@ -6,12 +6,15 @@ metadata:
     {{- include "temporal-stack.labels" . | nindent 4 }}
     app.kubernetes.io/component: schema
   annotations:
-    # Runs before the server Deployments so schema exists when they boot.
-    # Requires the DB to already exist outside this release (see database.host) —
-    # a bundled postgres subchart wouldn't exist yet at pre-install time.
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Argo CD Sync hook at wave 1. The bundled postgres subchart syncs at wave 0
+    # (Argo waits for it Healthy first); the server Deployments are wave 2, so the
+    # schema exists when they boot. Under Helm this was a `pre-install` hook, but
+    # Argo maps that to PreSync — which runs BEFORE the postgres subchart and
+    # deadlocks (see redbull-platform CLAUDE.md "Combined temporal chart"). A
+    # Sync-phase hook + sync-wave is the Argo-native expression of the ordering.
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 10
   activeDeadlineSeconds: 600

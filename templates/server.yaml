@@ -9,6 +9,11 @@ metadata:
   labels:
     {{- include "temporal-stack.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ $role }}
+  annotations:
+    # After postgres (wave 0) + schema (Sync hook, wave 1). Server pods crash-loop
+    # without the schema, so they MUST NOT share wave 0 with postgres — Argo would
+    # then wait for a never-healthy wave 0 before running the wave-1 schema hook.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: {{ $svc.replicaCount }}
   selector:

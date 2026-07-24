@@ -8,6 +8,9 @@ metadata:
   labels:
     {{- include "temporal-stack.labels" . | nindent 4 }}
     app.kubernetes.io/component: ui
+  annotations:
+    # Same wave as the server (2): the UI needs the frontend, which is wave 2.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: {{ .Values.ui.replicaCount }}
   selector:

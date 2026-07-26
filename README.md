@@ -130,14 +130,16 @@ Helm OCI pull is needed at install time.
 Every image reference in this chart (Temporal, UI, wait, the auth sidecars,
 and — via the Bitnami subchart's own convention — the bundled PostgreSQL) is
 built from a single `global.imageRegistry` prefix plus each component's
-`repository`/`tag`, which never change between environments. So mirroring is a
-two-step process: **(1)** push every image to Artifactory *preserving its
-repository path exactly*, **(2)** set one value.
+`repository`/`tag`, which never change between environments. So mirroring only
+requires **(1)** getting every image across as a tar file *preserving its
+repository path exactly* when it's pushed into Artifactory on the other side,
+**(2)** setting one value.
 
-### 1. Pull, retag, and push the images to Artifactory
+### 1. Pull and save the images
 
-These are every image the chart pulls. From a workstation with internet access,
-pull each one, retag it under your Artifactory Docker registry, and push:
+These are every image the chart pulls. From a workstation with internet
+access, pull each one and save it to a tar for transfer — tagging/pushing into
+Artifactory on the air-gapped side is handled separately:
 
 | Source image | Used by |
 |--------------|---------|
@@ -150,12 +152,9 @@ pull each one, retag it under your Artifactory Docker registry, and push:
 | `docker.io/nginxinc/nginx-unprivileged:1.27-alpine` | UI login username-allowlist gate **(skip unless `ui.auth.allowedUsers` is set)** |
 
 ```sh
-# Your Artifactory Docker registry (virtual/local repo), e.g.:
-ARTIFACTORY=artifactory.example.com/temporal-docker
+mkdir -p images
 
-docker login artifactory.example.com
-
-# Docker Hub images: retag preserves the repository path as-is.
+# Docker Hub images
 for img in \
   temporalio/auto-setup:1.29.7 \
   temporalio/admin-tools:1.29.7-tctl-1.18.4-cli-1.7.2 \
@@ -163,23 +162,25 @@ for img in \
   busybox:1.36 \
   bitnamilegacy/postgresql:17.6.0-debian-12-r4 \
   nginxinc/nginx-unprivileged:1.27-alpine ; do   # drop this last one if ui.auth.allowedUsers is unused
-    docker pull docker.io/$img
-    docker tag  docker.io/$img $ARTIFACTORY/$img
-    docker push $ARTIFACTORY/$img
+    podman pull docker.io/$img
+    podman save -o "images/$(echo $img | tr '/:' '__').tar" docker.io/$img
 done
 
-# quay.io image: keep the source registry as a path segment under Artifactory,
-# so it doesn't collide with a same-named Docker Hub repo.
+# quay.io image — note the source registry, so it doesn't collide with a
+# same-named Docker Hub repo once pushed under the same Artifactory path.
 img=quay.io/openshift/origin-oauth-proxy:4.18   # skip if ui.auth.enabled is unused
-docker pull $img
-docker tag  $img $ARTIFACTORY/$img
-docker push $ARTIFACTORY/$img
+podman pull $img
+podman save -o "images/$(echo $img | tr '/:' '__').tar" $img
 ```
 
-This preserves the original repository paths under your Artifactory repo, so the
-final references look like
-`artifactory.example.com/temporal-docker/temporalio/auto-setup:1.29.7` and
-`artifactory.example.com/temporal-docker/quay.io/openshift/origin-oauth-proxy:4.18`.
+When these get pushed into Artifactory on the air-gapped side, each one needs
+to land at its **repository path unchanged**, just under the Artifactory host
+— e.g. `temporalio/auto-setup:1.29.7` becomes
+`artifactory.example.com/temporal-docker/temporalio/auto-setup:1.29.7`, and
+`quay.io/openshift/origin-oauth-proxy:4.18` becomes
+`artifactory.example.com/temporal-docker/quay.io/openshift/origin-oauth-proxy:4.18`
+(keeping the `quay.io/` segment). That's what lets a single
+`global.imageRegistry` value resolve every image correctly.
 
 ### 2. Point the chart at Artifactory
 

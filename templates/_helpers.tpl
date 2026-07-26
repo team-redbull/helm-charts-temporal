@@ -65,6 +65,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
+Resolve "repository:tag" for a component image, prefixed with global.imageRegistry
+when set — repository/tag stay identical between environments; only the
+registry host changes (see README "Air-gapped install").
+Usage: {{ include "temporal-stack.image" (dict "root" $ "image" .Values.temporal.image) }}
+*/}}
+{{- define "temporal-stack.image" -}}
+{{- if .root.Values.global.imageRegistry -}}
+{{- printf "%s/%s:%s" .root.Values.global.imageRegistry .image.repository .image.tag -}}
+{{- else -}}
+{{- printf "%s:%s" .image.repository .image.tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Shared environment block for Temporal server pods and the schema job.
 The auto-setup/admin-tools entrypoints read these to render config & wire the DB.
 */}}

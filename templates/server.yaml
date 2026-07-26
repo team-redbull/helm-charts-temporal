@@ -53,7 +53,7 @@ spec:
         # dir isn't writable. Seed it into a writable emptyDir the entrypoint can
         # render docker.yaml into.
         - name: seed-config
-          image: "{{ $root.Values.temporal.image.repository }}:{{ $root.Values.temporal.image.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $root "image" $root.Values.temporal.image) }}"
           imagePullPolicy: {{ $root.Values.temporal.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -64,7 +64,7 @@ spec:
               mountPath: /config-rw
       containers:
         - name: temporal
-          image: "{{ $root.Values.temporal.image.repository }}:{{ $root.Values.temporal.image.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $root "image" $root.Values.temporal.image) }}"
           imagePullPolicy: {{ $root.Values.temporal.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false

@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: wait-for-frontend
-          image: "{{ .Values.waitImage.repository }}:{{ .Values.waitImage.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $ "image" .Values.waitImage) }}"
           imagePullPolicy: {{ .Values.waitImage.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -48,7 +48,7 @@ spec:
               done
       containers:
         - name: setup
-          image: "{{ .Values.temporal.schema.image.repository }}:{{ .Values.temporal.schema.image.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $ "image" .Values.temporal.schema.image) }}"
           imagePullPolicy: {{ .Values.temporal.schema.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false

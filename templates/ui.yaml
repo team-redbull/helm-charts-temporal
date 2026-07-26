@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ui
-          image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $ "image" .Values.ui.image) }}"
           imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -74,7 +74,7 @@ spec:
         # localhost. TLS cert/key are minted by the service-ca operator (see
         # the Service annotation below).
         - name: oauth-proxy
-          image: "{{ .Values.ui.auth.image.repository }}:{{ .Values.ui.auth.image.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $ "image" .Values.ui.auth.image) }}"
           imagePullPolicy: {{ .Values.ui.auth.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -135,7 +135,7 @@ spec:
         # Sits behind oauth-proxy — nothing outside the pod can reach it or
         # forge the X-Forwarded-User header it trusts.
         - name: username-gate
-          image: "{{ .Values.ui.auth.gate.image.repository }}:{{ .Values.ui.auth.gate.image.tag }}"
+          image: "{{ include "temporal-stack.image" (dict "root" $ "image" .Values.ui.auth.gate.image) }}"
           imagePullPolicy: {{ .Values.ui.auth.gate.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false

@@ -10,6 +10,24 @@ nameOverride: ""
 # the release name, instead of <release>-temporal-stack-*.
 fullnameOverride: "temporal"
 
+# Prefixed onto every image below (Temporal, UI, wait, auth sidecars, AND the
+# bundled PostgreSQL subchart — Bitnami's chart honors global.imageRegistry
+# natively, taking priority over its own postgresql.image.registry). Leave
+# empty to pull straight from each image's own upstream registry (Docker Hub,
+# quay.io) as named in its repository field below.
+#
+# For an air-gapped install, mirror every image (see README "Air-gapped
+# install") preserving its repository path exactly, then set this to your
+# mirror's host + team path, e.g. "artifactory.example.com/temporal-docker" —
+# no other field on this page needs to change.
+global:
+  imageRegistry: ""
+  security:
+    # The bundled PostgreSQL (Bitnami) subchart refuses to render once
+    # imageRegistry no longer matches its known-good image list, unless this
+    # is set. Flip to true whenever imageRegistry above is non-empty.
+    allowInsecureImages: false
+
 # Image pull secrets applied to every workload (Temporal + schema job + UI).
 # In an air-gapped install, create a pull secret for your internal registry and
 # list it here, e.g. [{ name: internal-registry }].

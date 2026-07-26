@@ -127,6 +127,13 @@ images**, and (usually) **use an existing managed PostgreSQL** instead of the
 bundled one. The PostgreSQL subchart is already vendored under `charts/`, so no
 Helm OCI pull is needed at install time.
 
+Every image reference in this chart (Temporal, UI, wait, the auth sidecars,
+and — via the Bitnami subchart's own convention — the bundled PostgreSQL) is
+built from a single `global.imageRegistry` prefix plus each component's
+`repository`/`tag`, which never change between environments. So mirroring is a
+two-step process: **(1)** push every image to Artifactory *preserving its
+repository path exactly*, **(2)** set one value.
+
 ### 1. Pull, retag, and push the images to Artifactory
 
 These are every image the chart pulls. From a workstation with internet access,
@@ -138,9 +145,9 @@ pull each one, retag it under your Artifactory Docker registry, and push:
 | `docker.io/temporalio/admin-tools:1.29.7-tctl-1.18.4-cli-1.7.2` | schema Job + namespace-setup Job |
 | `docker.io/temporalio/ui:2.51.0` | Web UI |
 | `docker.io/busybox:1.36` | wait-for init containers in the hook Jobs |
-| `docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4` | bundled PostgreSQL **(skip if using external DB)** |
-| `quay.io/openshift/origin-oauth-proxy:4.18` | UI login sidecar **(skip unless `ui.auth.enabled`)** — note the `quay.io` source; override `ui.auth.image.repository`/`tag` to your mirror |
-| `docker.io/nginxinc/nginx-unprivileged:1.27-alpine` | UI login username-allowlist gate **(skip unless `ui.auth.allowedUsers` is set)** — override `ui.auth.gate.image.repository`/`tag` to your mirror |
+| `docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4` | bundled PostgreSQL **(skip if using external DB — see 3a)** |
+| `quay.io/openshift/origin-oauth-proxy:4.18` | UI login sidecar **(skip unless `ui.auth.enabled`)** — note the `quay.io` source |
+| `docker.io/nginxinc/nginx-unprivileged:1.27-alpine` | UI login username-allowlist gate **(skip unless `ui.auth.allowedUsers` is set)** |
 
 ```sh
 # Your Artifactory Docker registry (virtual/local repo), e.g.:
@@ -148,59 +155,60 @@ ARTIFACTORY=artifactory.example.com/temporal-docker
 
 docker login artifactory.example.com
 
+# Docker Hub images: retag preserves the repository path as-is.
 for img in \
   temporalio/auto-setup:1.29.7 \
   temporalio/admin-tools:1.29.7-tctl-1.18.4-cli-1.7.2 \
   temporalio/ui:2.51.0 \
   busybox:1.36 \
-  bitnamilegacy/postgresql:17.6.0-debian-12-r4 ; do
+  bitnamilegacy/postgresql:17.6.0-debian-12-r4 \
+  nginxinc/nginx-unprivileged:1.27-alpine ; do   # drop this last one if ui.auth.allowedUsers is unused
     docker pull docker.io/$img
     docker tag  docker.io/$img $ARTIFACTORY/$img
     docker push $ARTIFACTORY/$img
 done
+
+# quay.io image: keep the source registry as a path segment under Artifactory,
+# so it doesn't collide with a same-named Docker Hub repo.
+img=quay.io/openshift/origin-oauth-proxy:4.18   # skip if ui.auth.enabled is unused
+docker pull $img
+docker tag  $img $ARTIFACTORY/$img
+docker push $ARTIFACTORY/$img
 ```
 
 This preserves the original repository paths under your Artifactory repo, so the
 final references look like
-`artifactory.example.com/temporal-docker/temporalio/auto-setup:1.29.7`.
+`artifactory.example.com/temporal-docker/temporalio/auto-setup:1.29.7` and
+`artifactory.example.com/temporal-docker/quay.io/openshift/origin-oauth-proxy:4.18`.
 
 ### 2. Point the chart at Artifactory
 
-Create a values file, e.g. `values-airgapped.yaml`, overriding **only the image
-fields** (everything else keeps its default):
+Create a values file, e.g. `values-airgapped.yaml`. One field does it for every
+image in the chart, including the bundled PostgreSQL and both UI auth
+sidecars — nothing else needs to change:
 
 ```yaml
 # Pull secret for Artifactory (create it in the temporal namespace first)
 imagePullSecrets:
   - name: artifactory
 
-# Temporal server (frontend/history/matching/worker + config init)
-temporal:
-  image:
-    repository: artifactory.example.com/temporal-docker/temporalio/auto-setup
-    tag: "1.29.7"
-  # schema Job + namespace-setup Job
-  schema:
-    image:
-      repository: artifactory.example.com/temporal-docker/temporalio/admin-tools
-      tag: "1.29.7-tctl-1.18.4-cli-1.7.2"
-
-# Web UI
-ui:
-  image:
-    repository: artifactory.example.com/temporal-docker/temporalio/ui
-    tag: "2.51.0"
-
-# wait-for init containers (hook Jobs)
-waitImage:
-  repository: artifactory.example.com/temporal-docker/busybox
-  tag: "1.36"
+global:
+  imageRegistry: artifactory.example.com/temporal-docker
+  security:
+    # Required whenever imageRegistry is set: the bundled PostgreSQL (Bitnami)
+    # subchart refuses to render once the registry no longer matches its
+    # known-good image list, unless this is explicitly acknowledged.
+    allowInsecureImages: true
 ```
 
-> The image `repository` is the **full path including registry host**; there is no
-> separate `registry:` field for the Temporal/UI/wait images. (The bundled
-> PostgreSQL subchart is the exception — see below — because it has its own
-> `image.registry`.)
+> Every `repository`/`tag` field elsewhere in `values.yaml` (`temporal.image`,
+> `temporal.schema.image`, `ui.image`, `waitImage`, `ui.auth.image`,
+> `ui.auth.gate.image`, `postgresql.image`) stays exactly as it is in the
+> default chart — only the registry prefix changes. This works because
+> `repository` is always the path *without* a registry host (e.g.
+> `temporalio/auto-setup`, or `quay.io/openshift/origin-oauth-proxy` for the
+> one image whose source isn't Docker Hub), and `global.imageRegistry` is
+> prepended onto it at render time.
 
 Create the pull secret once:
 
@@ -248,22 +256,19 @@ Notes for an external DB:
 
 ### 3b. Or keep the bundled PostgreSQL with a mirrored image
 
-If you do want the in-cluster database, push the Bitnami image to Artifactory (it's
-in the loop in step 1) and override its **own** `registry` + `repository` fields
-(note this subchart uses a separate `registry:`):
-
-```yaml
-postgresql:
-  enabled: true
-  image:
-    registry: artifactory.example.com
-    repository: temporal-docker/bitnamilegacy/postgresql
-    tag: 17.6.0-debian-12-r4
-```
+If you do want the in-cluster database, just push the Bitnami image to
+Artifactory (it's in the loop in step 1) — no extra values needed.
+`global.imageRegistry` (step 2) already overrides this subchart's registry too,
+because the Bitnami chart reads `global.imageRegistry` natively and it takes
+priority over its own `postgresql.image.registry: docker.io` default. Leave
+`postgresql.enabled: true` and `postgresql.image.repository`/`tag` as they are
+in the default `values.yaml`.
 
 > Why `bitnamilegacy`? Docker Hub's `bitnami/postgresql` now only publishes
 > `:latest`; concrete, reproducible tags moved to `bitnamilegacy`. Any
-> PostgreSQL 12+ Bitnami image works if you prefer a different one.
+> PostgreSQL 12+ Bitnami image works if you prefer a different one — just
+> change `postgresql.image.repository`/`tag`, the registry still comes from
+> `global.imageRegistry`.
 
 ### 4. Install offline
 

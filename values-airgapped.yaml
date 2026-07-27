@@ -1,0 +1,20 @@
+# Air-gapped overlay — layer on top of values.yaml:
+#   helm install temporal . -f values.yaml -f values-airgapped.yaml
+#
+# Every repository/tag field in values.yaml stays unchanged; this just
+# prepends the Artifactory registry host at render time (see README.md
+# "Air-gapped install"). No imagePullSecrets here — the target registry
+# doesn't require one.
+
+global:
+  imageRegistry: artifactory.example.com/temporal-docker
+  security:
+    # Required whenever imageRegistry is set: the bundled PostgreSQL
+    # (Bitnami) subchart refuses to render once the registry no longer
+    # matches its known-good image list, unless this is explicitly
+    # acknowledged.
+    allowInsecureImages: true
+
+ui:
+  auth:
+    enabled: true

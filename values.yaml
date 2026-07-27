@@ -153,7 +153,7 @@ ui:
     enabled: false
     image:
       repository: quay.io/openshift/origin-oauth-proxy
-      tag: "4.18"
+      tag: "4.20"
       pullPolicy: IfNotPresent
     # HTTPS port the sidecar listens on; the Service/Route target this
     # instead of the UI's plain HTTP port when auth is enabled.

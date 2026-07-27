@@ -148,7 +148,7 @@ Artifactory on the air-gapped side is handled separately:
 | `docker.io/temporalio/ui:2.51.0` | Web UI |
 | `docker.io/busybox:1.36` | wait-for init containers in the hook Jobs |
 | `docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4` | bundled PostgreSQL **(skip if using external DB — see 3a)** |
-| `quay.io/openshift/origin-oauth-proxy:4.18` | UI login sidecar **(skip unless `ui.auth.enabled`)** — note the `quay.io` source |
+| `quay.io/openshift/origin-oauth-proxy:4.20` | UI login sidecar **(skip unless `ui.auth.enabled`)** — note the `quay.io` source |
 | `docker.io/nginxinc/nginx-unprivileged:1.27-alpine` | UI login username-allowlist gate **(skip unless `ui.auth.allowedUsers` is set)** |
 
 ```sh
@@ -168,7 +168,7 @@ done
 
 # quay.io image — note the source registry, so it doesn't collide with a
 # same-named Docker Hub repo once pushed under the same Artifactory path.
-img=quay.io/openshift/origin-oauth-proxy:4.18   # skip if ui.auth.enabled is unused
+img=quay.io/openshift/origin-oauth-proxy:4.20   # skip if ui.auth.enabled is unused
 podman pull $img
 podman save -o "images/$(echo $img | tr '/:' '__').tar" $img
 ```
@@ -177,8 +177,8 @@ When these get pushed into Artifactory on the air-gapped side, each one needs
 to land at its **repository path unchanged**, just under the Artifactory host
 — e.g. `temporalio/auto-setup:1.29.7` becomes
 `artifactory.example.com/temporal-docker/temporalio/auto-setup:1.29.7`, and
-`quay.io/openshift/origin-oauth-proxy:4.18` becomes
-`artifactory.example.com/temporal-docker/quay.io/openshift/origin-oauth-proxy:4.18`
+`quay.io/openshift/origin-oauth-proxy:4.20` becomes
+`artifactory.example.com/temporal-docker/quay.io/openshift/origin-oauth-proxy:4.20`
 (keeping the `quay.io/` segment). That's what lets a single
 `global.imageRegistry` value resolve every image correctly.
 
